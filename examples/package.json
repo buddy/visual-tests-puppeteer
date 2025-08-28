@@ -1,0 +1,13 @@
+{
+  "name": "visual-test-puppeteer-plugin-example",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "start": "node './server.js'",
+    "test": "bdy vt exec \"node index.js\""
+  },
+  "dependencies": {
+    "bdy": "1.9.4",
+    "puppeteer": "24.4.0"
+  }
+}

@@ -1,6 +1,6 @@
 {
   "name": "@buddy-works/visual-tests-puppeteer",
-  "version": "2.0.0",
+  "version": "1.0.0",
   "description": "Buddy Visual Test Puppeteer Plugin",
   "keywords": [
     "buddy",

@@ -1,0 +1,4 @@
+allowBuilds:
+  puppeteer: true
+minimumReleaseAgeExclude:
+  - bdy@1.24.0

@@ -1,8 +1,7 @@
-import { Page } from "puppeteer";
-import { SnapshotOptions, Snapshot } from "./types";
-import { Cookie } from "puppeteer";
+import type { Cookie, Page } from "puppeteer";
+import type { Snapshot, SnapshotOptions, VisualTestsPluginOptions } from "./types";
 
-type GlobalThis = {
+interface WindowSnapshot {
   SNAPSHOT: {
     parseDom: (
       document: Document,
@@ -10,10 +9,11 @@ type GlobalThis = {
     ) => {
       title: string;
       html: string;
-      resources: Array<{ url: string; type: string }>;
+      resources: { url: string; type: string }[];
     };
   };
-};
+}
+
 /**
  * Plugin for capturing snapshots of web pages for visual testing.
  */
@@ -23,10 +23,10 @@ export class VisualTestsPlugin {
 
   /**
    * Creates a new instance of VisualTestsPlugin
-   * @param {boolean} [suppressErrors=true] - Whether to suppress errors from plugin methods
+   * @param {VisualTestsPluginOptions} [options={}] - The plugin options
    */
-  constructor(suppressErrors = true) {
-    this.suppressErrors = suppressErrors;
+  constructor(options: VisualTestsPluginOptions = {}) {
+    this.suppressErrors = options.suppressErrors ?? true;
   }
 
   /**
@@ -35,7 +35,9 @@ export class VisualTestsPlugin {
    * @returns {Promise<void>}
    */
   private async fetchParseDom(): Promise<void> {
-    if (this.parseDomScript) return;
+    if (this.parseDomScript) {
+      return;
+    }
 
     try {
       const response = await fetch("http://localhost:1337/parseDom.js");
@@ -45,12 +47,111 @@ export class VisualTestsPlugin {
       this.parseDomScript = await response.text();
     } catch (error) {
       if (!this.suppressErrors) {
-        const error_ =
-          error instanceof Error
-            ? new Error(`Failed to fetch parseDom.js: ${error.message}`)
-            : new Error(`Failed to fetch parseDom.js: ${String(error)}`);
-        throw error_;
+        throw new Error(`Failed to fetch parseDom.js: ${String(error)}`, { cause: error });
       }
+    }
+  }
+
+  /**
+   * Injects the parseDom script into the page unless it is already present
+   * @private
+   * @param {Page} page - The Puppeteer page instance
+   * @returns {Promise<void>}
+   */
+  private async injectParseDom(page: Page): Promise<void> {
+    const isScriptInjected = await page.evaluate(
+      () => (globalThis as unknown as WindowSnapshot).SNAPSHOT !== undefined,
+    );
+    if (!isScriptInjected) {
+      await page.evaluate(this.parseDomScript!);
+    }
+  }
+
+  /**
+   * Reads the browser cookies when cloning is requested
+   * @private
+   * @param {Page} page - The Puppeteer page instance
+   * @param {boolean} [cloneCookies] - Whether cookies should be cloned
+   * @returns {Promise<Cookie[]>} The browser cookies, or an empty array
+   */
+  private collectCookies(page: Page, cloneCookies?: boolean): Promise<Cookie[]> {
+    if (cloneCookies) {
+      return page.browser().cookies();
+    }
+    return Promise.resolve([]);
+  }
+
+  /**
+   * Builds the snapshot payload from the current page state
+   * @private
+   * @param {Page} page - The Puppeteer page instance
+   * @param {string} name - The name of the snapshot
+   * @param {SnapshotOptions} options - The snapshot options
+   * @returns {Promise<Snapshot>} The snapshot data
+   */
+  private async buildSnapshot(
+    page: Page,
+    name: string,
+    {
+      devices,
+      fullPage,
+      colorScheme,
+      enableJavaScript,
+      injectStyles,
+      resourceDiscoveryTimeout,
+      cloneCookies,
+      cssIgnores,
+      xpathIgnores,
+    }: SnapshotOptions,
+  ): Promise<Snapshot> {
+    const { title, html, resources } = await page.evaluate(
+      (jsEnabled) =>
+        (globalThis as unknown as WindowSnapshot).SNAPSHOT.parseDom(document, jsEnabled),
+      enableJavaScript,
+    );
+
+    return {
+      colorScheme,
+      cookies: await this.collectCookies(page, cloneCookies),
+      cssIgnores,
+      devices,
+      enableJavaScript,
+      fullPage,
+      html,
+      injectStyles,
+      name,
+      resourceDiscoveryTimeout,
+      resources,
+      title,
+      url: page.url(),
+      version: 1,
+      xpathIgnores,
+    };
+  }
+
+  /**
+   * Sends the snapshot to the server
+   * @private
+   * @param {Snapshot} snapshot - The snapshot data
+   * @returns {Promise<void>}
+   * @throws {Error} When the server responds with a non-OK status
+   */
+  private async sendSnapshot(snapshot: Snapshot): Promise<void> {
+    const response = await fetch("http://localhost:1337/snapshot", {
+      body: JSON.stringify(snapshot),
+      cache: "no-cache",
+      credentials: "same-origin",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      method: "POST",
+      mode: "cors",
+      redirect: "follow",
+      referrerPolicy: "no-referrer",
+    });
+
+    if (!response.ok) {
+      throw new Error(`Server responded with status ${response.status}`);
     }
   }
 
@@ -67,17 +168,7 @@ export class VisualTestsPlugin {
   async takeSnap(
     page: Page,
     name: string,
-    {
-      devices,
-      fullPage,
-      colorScheme,
-      enableJavaScript,
-      injectStyles,
-      resourceDiscoveryTimeout,
-      cloneCookies,
-      cssIgnores,
-      xpathIgnores,
-    }: SnapshotOptions = {},
+    options: SnapshotOptions = {},
   ): Promise<Snapshot | void> {
     if (!name || typeof name !== "string") {
       throw new Error("Snapshot name is required and must be a string");
@@ -89,63 +180,10 @@ export class VisualTestsPlugin {
       return;
     }
 
-    const isScriptInjected = await page.evaluate(() => {
-      return (globalThis as unknown as GlobalThis).SNAPSHOT !== undefined;
-    });
+    await this.injectParseDom(page);
 
-    if (!isScriptInjected) {
-      await page.evaluate(this.parseDomScript!);
-    }
-
-    const url = page.url();
-
-    let cookies: Cookie[] = [];
-    if (cloneCookies) {
-      const browser = page.browser();
-      cookies = await browser.cookies();
-    }
-
-    const { title, html, resources } = await page.evaluate((jsEnabled) => {
-      return (globalThis as unknown as GlobalThis).SNAPSHOT.parseDom(
-        document,
-        jsEnabled,
-      );
-    }, enableJavaScript);
-
-    const snapshot: Snapshot = {
-      name,
-      url,
-      title,
-      html,
-      resources,
-      devices,
-      colorScheme,
-      fullPage,
-      enableJavaScript,
-      injectStyles,
-      resourceDiscoveryTimeout,
-      cookies,
-      cssIgnores,
-      xpathIgnores,
-      version: 1,
-    };
-
-    const response = await fetch("http://localhost:1337/snapshot", {
-      method: "POST",
-      mode: "cors",
-      cache: "no-cache",
-      credentials: "same-origin",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      redirect: "follow",
-      referrerPolicy: "no-referrer",
-      body: JSON.stringify(snapshot),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Server responded with status ${response.status}`);
-    }
+    const snapshot = await this.buildSnapshot(page, name, options);
+    await this.sendSnapshot(snapshot);
 
     return snapshot;
   }

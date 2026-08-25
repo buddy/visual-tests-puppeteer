@@ -1,12 +1,12 @@
 # Visual Test Puppeteer Plugin
 
-
 A Puppeteer plugin for performing visual testing using Buddy Works Visual Testing. This plugin allows automatic capturing of website snapshots across different screen resolutions and comparing them with reference versions to detect visual regressions.
 
 ## Requirements
 
-- Node.js >= 20
-- Puppeteer >= 23.10.0
+- **Node.js** `>=20`
+- **Puppeteer** `>=23.10.0`
+- **[bdy CLI](https://www.npmjs.com/package/bdy)** — tests must be run through the CLI within a visual testing session, e.g. `bdy tests visual session create "node index.js"`
 
 ## Installation
 
@@ -16,17 +16,46 @@ npm install @buddy-works/visual-tests-puppeteer
 
 ## Usage
 
+### ESM (`import`)
+
 ```javascript
-import { takeSnap } from '@buddy-works/visual-tests-puppeteer';
-import puppeteer from 'puppeteer';
+import puppeteer from "puppeteer";
+import VisualTestsPlugin from "@buddy-works/visual-tests-puppeteer";
+
+const browser = await puppeteer.launch();
+const page = await browser.newPage();
+const visualTests = new VisualTestsPlugin();
+
+await page.goto("https://example.com");
+
+await visualTests.takeSnap(page, "homepage", {
+  devices: [{ viewport: { width: 1366, height: 768 } }],
+  colorScheme: "DARK",
+  cloneCookies: true,
+});
+
+await browser.close();
+```
+
+### CommonJS (`require`)
+
+```javascript
+const puppeteer = require("puppeteer");
+const { VisualTestsPlugin } = require("@buddy-works/visual-tests-puppeteer");
 
 async function run() {
   const browser = await puppeteer.launch();
   const page = await browser.newPage();
-  
-  await page.goto('https://buddy.works/blog');
-  await takeSnap(page, 'example-homepage');
-  
+  const visualTests = new VisualTestsPlugin();
+
+  await page.goto("https://example.com");
+
+  await visualTests.takeSnap(page, "homepage", {
+    devices: [{ viewport: { width: 1366, height: 768 } }],
+    colorScheme: "DARK",
+    cloneCookies: true,
+  });
+
   await browser.close();
 }
 

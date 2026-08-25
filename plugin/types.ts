@@ -1,4 +1,4 @@
-import { Cookie } from "puppeteer";
+import type { Cookie } from "puppeteer";
 
 /**
  * Interface representing viewport dimensions
@@ -170,4 +170,11 @@ interface Snapshot {
   version: number;
 }
 
-export { Snapshot, SnapshotOptions, Device, Viewport };
+/**
+ * Interface for the VisualTestsPlugin constructor
+ */
+interface VisualTestsPluginOptions {
+  suppressErrors?: boolean;
+}
+
+export { Snapshot, SnapshotOptions, Device, Viewport, VisualTestsPluginOptions };

@@ -3,11 +3,16 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "start": "node './server.js'",
-    "test": "bdy vt exec \"node index.js\""
+    "test": "bdy tests visual session create \"node index.js\""
   },
   "dependencies": {
-    "bdy": "1.9.4",
-    "puppeteer": "24.4.0"
+    "@buddy-works/visual-tests-puppeteer": "link:..",
+    "bdy": "1.24.0",
+    "puppeteer": "25.8.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "@buddy-works/visual-tests-puppeteer": "link:.."
+    }
   }
 }

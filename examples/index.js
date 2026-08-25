@@ -1,31 +1,20 @@
+import VisualTestsPlugin from "@buddy-works/visual-tests-puppeteer";
 import puppeteer from "puppeteer";
-import VisualTestsPlugin from "../dist/index.mjs";
 
-async function testExample(browser) {
+const browser = await puppeteer.launch();
+
+try {
   const page = await browser.newPage();
-  const visualTests = new VisualTestsPlugin();
-
   try {
     await page.goto("https://buddy.works");
 
     await page.waitForSelector("h1", { visible: true });
 
+    const visualTests = new VisualTestsPlugin();
     await visualTests.takeSnap(page, "homepage");
   } finally {
     await page.close();
   }
+} finally {
+  await browser.close();
 }
-
-async function runTests() {
-  const browser = await puppeteer.launch({
-    headless: "new",
-  });
-
-  try {
-    await testExample(browser);
-  } finally {
-    await browser.close();
-  }
-}
-
-runTests();
